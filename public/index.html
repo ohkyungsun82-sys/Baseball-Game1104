@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>3D 홈런 야구 대결</title>
+    <title>실시간 3D 야구 경기</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #f8fafc; text-align: center; margin: 0; overflow: hidden; }
         .card { background: #1e293b; max-width: 450px; margin: 80px auto; padding: 30px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
@@ -10,39 +10,41 @@
         button { background: #3b82f6; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold; width: 90%; margin-top: 10px; }
         button:hover { background: #2563eb; }
         .hidden { display: none !important; }
-        
+
         #game-container { position: relative; width: 100vw; height: 100vh; }
-        #canvas-container { width: 100%; height: 70vh; background: #87ceeb; }
+        #canvas-container { width: 100vh; height: 65vh; margin: 0 auto; background: #1b4d3e; }
+
+        /* 전광판 (Scoreboard) */
+        .scoreboard { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.9); padding: 12px 25px; border-radius: 12px; border: 2px solid #f59e0b; display: flex; gap: 20px; font-weight: bold; font-size: 16px; }
         
-        /* UI 오버레이 */
-        .ui-overlay { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.85); padding: 15px 30px; border-radius: 12px; border: 1px solid #334155; display: flex; gap: 30px; font-weight: bold; }
+        /* 다이아몬드 베이스 시각화 */
+        .field-status { position: absolute; top: 90px; right: 20px; background: rgba(0,0,0,0.8); padding: 12px; border-radius: 10px; text-align: left; font-size: 14px; }
+        .base-diamond { width: 60px; height: 60px; position: relative; margin: 5px auto; transform: rotate(45deg); border: 2px solid #fff; }
+        .base { position: absolute; width: 14px; height: 14px; background: #fff; }
+        #b2 { top: 0; left: 23px; }
+        #b3 { top: 23px; left: 0; }
+        #b1 { top: 23px; right: 0; }
+        #b_home { bottom: 0; left: 23px; background: #f59e0b; }
+        .active-base { background: #ef4444 !important; }
+
+        /* 투수 컨트롤 패널 */
+        #pitcher-panel { position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); padding: 20px; border-radius: 12px; border: 2px solid #3b82f6; text-align: center; width: 350px; }
         
-        /* 타격 타이밍 바 */
-        #timing-ui { position: absolute; bottom: 180px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 15px 25px; border-radius: 12px; text-align: center; border: 2px solid #3b82f6; }
-        .bar-container { width: 300px; height: 25px; background: #334155; border-radius: 12px; margin: 10px auto; position: relative; overflow: hidden; }
-        .sweet-spot { position: absolute; left: 40%; width: 20%; height: 100%; background: rgba(16, 185, 129, 0.6); }
+        /* 타자 타이밍 바 패널 */
+        #batter-panel { position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); padding: 20px; border-radius: 12px; border: 2px solid #10b981; text-align: center; width: 380px; }
+        .bar-container { width: 100%; height: 25px; background: #334155; border-radius: 12px; margin: 10px 0; position: relative; overflow: hidden; }
+        .sweet-spot { position: absolute; left: 42%; width: 16%; height: 100%; background: rgba(16, 185, 129, 0.7); }
         #cursor-bar { position: absolute; left: 0%; top: 0; width: 8px; height: 100%; background: #ef4444; border-radius: 4px; }
 
-        /* 스페이스바 연타 UI */
-        #mash-ui { position: absolute; bottom: 180px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); padding: 20px 30px; border-radius: 12px; text-align: center; border: 2px solid #eab308; width: 350px; }
-        .mash-bar-outer { width: 100%; height: 25px; background: #334155; border-radius: 12px; margin-top: 10px; overflow: hidden; }
-        #mash-bar-inner { width: 0%; height: 100%; background: #10b981; transition: width 0.1s; }
-
-        /* 채팅창 */
-        .chat-container { position: absolute; bottom: 10px; left: 10px; width: 300px; background: rgba(15,23,42,0.9); border-radius: 8px; padding: 10px; text-align: left; border: 1px solid #334155; }
-        .chat-messages { height: 80px; overflow-y: auto; font-size: 13px; margin-bottom: 5px; }
-        .chat-input-row { display: flex; gap: 5px; }
-        .chat-input-row input { width: 75%; margin: 0; padding: 6px; font-size: 13px; }
-        .chat-input-row button { width: 25%; margin: 0; padding: 6px; font-size: 13px; }
+        .chat-container { position: absolute; bottom: 10px; left: 10px; width: 280px; background: rgba(15,23,42,0.9); border-radius: 8px; padding: 10px; text-align: left; border: 1px solid #334155; }
+        .chat-messages { height: 70px; overflow-y: auto; font-size: 13px; margin-bottom: 5px; }
     </style>
-    <!-- Three.js 라이브러리 로드 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
-    <!-- 로그인 화면 -->
     <div class="card" id="auth-screen">
-        <h2>⚾ 3D 홈런 야구 대결</h2>
+        <h2>⚾ 실시간 3D 야구 경기</h2>
         <input type="text" id="username" placeholder="아이디"><br>
         <input type="password" id="password" placeholder="비밀번호"><br>
         <button onclick="login()">로그인</button>
@@ -50,56 +52,61 @@
         <p id="auth-msg" style="color: #ef4444; margin-top: 10px;"></p>
     </div>
 
-    <!-- 로비 화면 -->
     <div class="card hidden" id="lobby-screen">
         <h2 id="welcome-user">환영합니다!</h2>
-        <p id="record-text">전적: 0승 0패</p>
-        <button onclick="startMatchmaking()">3D 매칭 시작하기</button>
+        <button onclick="startMatchmaking()">야구 경기 매칭 시작</button>
     </div>
 
-    <!-- 대기 화면 -->
     <div class="card hidden" id="waiting-screen">
         <h2>상대를 찾는 중...</h2>
-        <p>배틀 상대를 매칭하고 있습니다.</p>
         <button onclick="cancelMatch()" style="background: #ef4444;">취소</button>
     </div>
 
-    <!-- 3D 게임 화면 -->
     <div class="card hidden" id="game-container" style="max-width: none; padding: 0; margin: 0;">
-        <div class="ui-overlay">
-            <div>상대: <span id="opp-name">상대방</span></div>
-            <div>내 점수: <span id="my-score">0</span>점</div>
-            <div id="game-status" style="color: #f59e0b;">상대 차례입니다</div>
+        <!-- 전광판 -->
+        <div class="scoreboard">
+            <div>이닝: <span id="inning-text">1회초</span></div>
+            <div>|</div>
+            <div>홈: <span id="score-p1">0</span> vs 원정: <span id="score-p2">0</span></div>
+            <div>|</div>
+            <div>S: <span id="count-s">0</span> B: <span id="count-b">0</span> O: <span id="count-o">0</span></div>
+        </div>
+
+        <!-- 베이스 상황 뷰어 -->
+        <div class="field-status">
+            <div style="text-align: center; font-size: 12px; margin-bottom: 2px;">주자 상황</div>
+            <div class="base-diamond">
+                <div class="base" id="b2"></div>
+                <div class="base" id="b3"></div>
+                <div class="base" id="b1"></div>
+                <div class="base" id="b_home"></div>
+            </div>
         </div>
 
         <div id="canvas-container"></div>
 
-        <!-- 타격 타이밍 UI (바가 왔다갔다함) -->
-        <div id="timing-ui" class="hidden">
-            <h3>⚡ 배트 타이밍 맞추기! (3회 성공 필요)</h3>
-            <p>성공 횟수: <span id="hit-count">0</span> / 3</p>
+        <!-- 투수 컨트롤 박스 -->
+        <div id="pitcher-panel" class="hidden">
+            <h3>🥎 투수 턴: 구종을 선택하세요!</h3>
+            <button onclick="pitch('fastball')" style="background: #ef4444;">직구 (빠름)</button>
+            <button onclick="pitch('curveball')" style="background: #3b82f6;">커브 (느림/변화)</button>
+        </div>
+
+        <!-- 타자 컨트롤 박스 -->
+        <div id="batter-panel" class="hidden">
+            <h3 id="batter-msg">⚾ 타자 턴: 타이밍에 맞춰 스윙!</h3>
             <div class="bar-container">
                 <div class="sweet-spot"></div>
                 <div id="cursor-bar"></div>
             </div>
-            <button onclick="tryHit()" style="background: #10b981; width: 100%; margin-top: 5px;">스윙! (스페이스바 또는 클릭)</button>
+            <button onclick="swingBat()" style="background: #10b981;">스윙! (스페이스바)</button>
         </div>
 
-        <!-- 스페이스바 연타 러시 UI -->
-        <div id="mash-ui" class="hidden">
-            <h3>🏃‍♂️ 홈으로 전력 질주!</h3>
-            <p>스페이스바를 빠르게 연타하세요! (<span id="mash-count">0</span>/20)</p>
-            <div class="mash-bar-outer">
-                <div id="mash-bar-inner"></div>
-            </div>
-        </div>
-
-        <!-- 실시간 채팅 -->
         <div class="chat-container">
             <div class="chat-messages" id="chat-box"></div>
-            <div class="chat-input-row">
-                <input type="text" id="chat-input" placeholder="대화..." onkeypress="if(event.key==='Enter') sendChat()">
-                <button onclick="sendChat()">전송</button>
+            <div style="display: flex; gap: 5px;">
+                <input type="text" id="chat-input" placeholder="대화..." onkeypress="if(event.key==='Enter') sendChat()" style="width:75%; margin:0; padding:5px; font-size:13px;">
+                <button onclick="sendChat()" style="width:25%; margin:0; padding:5px; font-size:13px;">전송</button>
             </div>
         </div>
     </div>
@@ -108,46 +115,28 @@
     <script>
         const socket = io();
         let currentUser = null;
-        let scene, camera, renderer, ball, bat, pitcher;
-        let gameState = 'waiting'; // 'timing', 'mashing', 'idle'
-        let hitSuccessCount = 0;
+        let myRole = ''; // 'pitcher' or 'batter'
+        let scene, camera, renderer, ball, batterMesh, pitcherMesh;
+        let timingInterval = null;
         let cursorPosition = 0;
-        let cursorDirection = 1;
-        let animInterval = null;
-        let mashCount = 0;
-        let myTotalScore = 0;
+        let cursorSpeed = 2;
 
         async function signup() {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
-            const res = await fetch('/api/signup', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password })
-            });
+            const res = await fetch('/api/signup', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({username, password}) });
             const data = await res.json();
-            if (data.success) {
-                alert('회원가입 성공! 자동 로그인됩니다.');
-                setLoginUser(data.user);
-            } else {
-                document.getElementById('auth-msg').innerText = data.message;
-            }
+            if (data.success) { alert('가입 성공!'); setLoginUser(data.user); }
+            else { document.getElementById('auth-msg').innerText = data.message; }
         }
 
         async function login() {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
-            const res = await fetch('/api/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password })
-            });
+            const res = await fetch('/api/login', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({username, password}) });
             const data = await res.json();
-            if (data.success) {
-                setLoginUser(data.user);
-            } else {
-                document.getElementById('auth-msg').innerText = data.message;
-            }
+            if (data.success) { setLoginUser(data.user); }
+            else { document.getElementById('auth-msg').innerText = data.message; }
         }
 
         function setLoginUser(user) {
@@ -155,7 +144,6 @@
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('lobby-screen').classList.remove('hidden');
             document.getElementById('welcome-user').innerText = `${user.username}님 환영합니다!`;
-            document.getElementById('record-text').innerText = `전적: ${user.wins}승 ${user.losses}패`;
         }
 
         function startMatchmaking() {
@@ -170,188 +158,147 @@
             document.getElementById('lobby-screen').classList.remove('hidden');
         }
 
-        socket.on('waiting', (msg) => { console.log(msg); });
-
-        socket.on('game_start', ({ opponent, isMyTurn }) => {
+        socket.on('game_start', ({ opponent, role, gameState }) => {
             document.getElementById('waiting-screen').classList.add('hidden');
             document.getElementById('game-container').classList.remove('hidden');
-            document.getElementById('opp-name').innerText = opponent;
-            init3DScene();
-            
-            if (isMyTurn) {
-                startAtbat();
-            } else {
-                document.getElementById('game-status').innerText = "상대방 타격 중...";
-            }
+            myRole = role;
+            init3D();
+            updateUI(gameState);
         });
 
-        // Three.js 3D 야구장 렌더링
-        function init3DScene() {
+        function init3D() {
             const container = document.getElementById('canvas-container');
             container.innerHTML = '';
-            
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87ceeb);
+            scene.background = new THREE.Color(0x1b4d3e);
 
             camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
-            camera.position.set(0, 3, 8);
-            camera.lookAt(0, 1, -10);
+            camera.position.set(0, 3, 6);
+            camera.lookAt(0, 1, -5);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(container.clientWidth, container.clientHeight);
             container.appendChild(renderer.domElement);
 
-            // 조명
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-            scene.add(ambientLight);
-            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            dirLight.position.set(10, 20, 10);
-            scene.add(dirLight);
-
-            // 그라운드
-            const groundGeo = new THREE.PlaneGeometry(50, 100);
-            const groundMat = new THREE.MeshStandardMaterial({ color: 0x2e8b57 });
-            const ground = new THREE.Mesh(groundGeo, groundMat);
-            ground.rotation.x = -Math.PI / 2;
-            scene.add(ground);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+            const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+            dir.position.set(5, 10, 5);
+            scene.add(dir);
 
             // 야구공
-            const ballGeo = new THREE.SphereGeometry(0.3, 32, 32);
-            const ballMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
-            ball = new THREE.Mesh(ballGeo, ballMat);
-            ball.position.set(0, 1.5, -15);
+            ball = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 16), new THREE.MeshStandardMaterial({color: 0xffffff}));
+            ball.position.set(0, 1.5, -12);
             scene.add(ball);
 
-            // 배트
-            const batGeo = new THREE.CylinderGeometry(0.1, 0.15, 2, 16);
-            const batMat = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
-            bat = new THREE.Mesh(batGeo, batMat);
-            bat.rotation.z = Math.PI / 4;
-            bat.position.set(0.8, 1, -1);
-            scene.add(bat);
-
-            animate3D();
+            animate();
         }
 
-        function animate3D() {
-            requestAnimationFrame(animate3D);
+        function animate() {
+            requestAnimationFrame(animate);
             renderer.render(scene, camera);
         }
 
-        // 내 타격 턴 시작
-        function startAtbat() {
-            document.getElementById('game-status').innerText = "⚡ 나의 타격 차례!";
-            hitSuccessCount = 0;
-            document.getElementById('hit-count').innerText = hitSuccessCount;
-            document.getElementById('timing-ui').classList.remove('hidden');
-            
-            gameState = 'timing';
-            startTimingBar();
+        // 투수 피칭
+        function pitch(pitchType) {
+            if (myRole !== 'pitcher') return;
+            document.getElementById('pitcher-panel').classList.add('hidden');
+            socket.emit('pitch_ball', { pitchType });
         }
 
-        // 타이밍 바 왕복 애니메이션
+        // 타자에게 공이 날아옴
+        socket.on('incoming_pitch', ({ pitchType }) => {
+            if (myRole === 'batter') {
+                document.getElementById('batter-panel').classList.remove('hidden');
+                cursorSpeed = pitchType === 'fastball' ? 3.5 : 2.0;
+                startTimingBar();
+            }
+        });
+
         function startTimingBar() {
             cursorPosition = 0;
-            cursorDirection = 1;
-            if (animInterval) clearInterval(animInterval);
-
-            animInterval = setInterval(() => {
-                if (gameState !== 'timing') return;
-                cursorPosition += cursorDirection * 2;
-                if (cursorPosition >= 100 || cursorPosition <= 0) {
-                    cursorDirection *= -1;
-                }
+            let dir = 1;
+            if (timingInterval) clearInterval(timingInterval);
+            timingInterval = setInterval(() => {
+                cursorPosition += dir * cursorSpeed;
+                if (cursorPosition >= 100 || cursorPosition <= 0) dir *= -1;
                 document.getElementById('cursor-bar').style.left = cursorPosition + '%';
             }, 20);
         }
 
-        // 스윙 시도 (바의 중앙 40% ~ 60% 영역이 스위트 스팟)
-        function tryHit() {
-            if (gameState !== 'timing') return;
+        // 스윙 시도
+        function swingBat() {
+            if (myRole !== 'batter') return;
+            clearInterval(timingInterval);
+            document.getElementById('batter-panel').classList.add('hidden');
 
-            if (cursorPosition >= 40 && cursorPosition <= 60) {
-                hitSuccessCount++;
-                document.getElementById('hit-count').innerText = hitSuccessCount;
-                
-                // 배트 휘두르는 애니메이션 효과
-                bat.rotation.x -= 0.8;
-                setTimeout(() => { bat.rotation.x += 0.8; }, 200);
-
-                if (hitSuccessCount >= 3) {
-                    clearInterval(animInterval);
-                    document.getElementById('timing-ui').classList.add('hidden');
-                    startMashingPhase();
-                }
+            let result = 'out';
+            if (cursorPosition >= 42 && cursorPosition <= 58) {
+                result = Math.random() < 0.2 ? 'homerun' : 'hit';
+            } else if (cursorPosition > 30 && cursorPosition < 70) {
+                result = Math.random() < 0.5 ? 'strike' : 'out';
             } else {
-                alert('헛스윙! 타이밍을 다시 맞추세요.');
+                result = 'strike';
             }
+
+            socket.emit('atbat_result', { result });
         }
 
-        // 스페이스바 연타 페이즈 시작
-        function startMashingPhase() {
-            gameState = 'mashing';
-            mashCount = 0;
-            document.getElementById('mash-count').innerText = mashCount;
-            document.getElementById('mash-bar-inner').style.width = '0%';
-            document.getElementById('mash-ui').classList.remove('hidden');
-            document.getElementById('game-status').innerText = "🏃‍♂️ 스페이스바 연타로 홈으로 질주!";
-        }
-
-        // 키보드 입력 감지 (스페이스바 연타)
+        // 스페이스바로도 스윙 가능
         window.addEventListener('keydown', (e) => {
-            if (e.code === 'Space') {
-                if (gameState === 'timing') {
-                    e.preventDefault();
-                    tryHit();
-                } else if (gameState === 'mashing') {
-                    e.preventDefault();
-                    mashCount++;
-                    document.getElementById('mash-count').innerText = mashCount;
-                    let percent = (mashCount / 20) * 100;
-                    document.getElementById('mash-bar-inner').style.width = percent + '%';
-
-                    // 3D 공이 홈런처럼 날아가는 애니메이션
-                    ball.position.z += 1.5;
-                    ball.position.y += 0.5;
-
-                    if (mashCount >= 20) {
-                        gameState = 'idle';
-                        document.getElementById('mash-ui').classList.add('hidden');
-                        myTotalScore += 10;
-                        document.getElementById('my-score').innerText = myTotalScore;
-                        alert('🎉 홈런! 10점 획득!');
-                        socket.emit('submit_score', { score: myTotalScore });
-                    }
-                }
+            if (e.code === 'Space' && myRole === 'batter' && !document.getElementById('batter-panel').classList.contains('hidden')) {
+                e.preventDefault();
+                swingBat();
             }
         });
 
-        // 채팅 기능
+        // 경기 상태 업데이트
+        socket.on('update_game_state', ({ gameState }) => {
+            updateUI(gameState);
+        });
+
+        function updateUI(state) {
+            document.getElementById('inning-text').innerText = `${state.inning}회 ${state.isTop ? '초' : '말'}`;
+            const pIds = Object.keys(state.scores);
+            document.getElementById('score-p1').innerText = state.scores[pIds[0]];
+            document.getElementById('score-p2').innerText = state.scores[pIds[1]];
+            document.getElementById('count-s').innerText = state.strikes;
+            document.getElementById('count-b').innerText = state.balls;
+            document.getElementById('count-o').innerText = state.outs;
+
+            // 베이스 표시
+            document.getElementById('b1').className = 'base ' + (state.bases[0] ? 'active-base' : '');
+            document.getElementById('b2').className = 'base ' + (state.bases[1] ? 'active-base' : '');
+            document.getElementById('b3').className = 'base ' + (state.bases[2] ? 'active-base' : '');
+
+            // 턴 재배정 확인
+            if (state.batter.id === socket.id) {
+                myRole = 'batter';
+                document.getElementById('pitcher-panel').classList.add('hidden');
+                document.getElementById('batter-msg').innerText = "⚾ 내 차례: 투수가 공을 던지면 스윙하세요!";
+            } else {
+                myRole = 'pitcher';
+                document.getElementById('batter-panel').classList.add('hidden');
+                document.getElementById('pitcher-panel').classList.remove('hidden');
+            }
+        }
+
+        socket.on('game_over', ({ scores }) => {
+            alert('게임 종료! 최종 점수 확인');
+            window.location.reload();
+        });
+
         function sendChat() {
             const input = document.getElementById('chat-input');
             if (!input.value.trim()) return;
             socket.emit('send_chat', input.value);
             input.value = '';
         }
-
         socket.on('receive_chat', ({ sender, message }) => {
             const box = document.getElementById('chat-box');
             box.innerHTML += `<div><b>${sender}:</b> ${message}</div>`;
             box.scrollTop = box.scrollHeight;
         });
-
-        socket.on('change_turn', ({ currentTurn }) => {
-            if (currentTurn === socket.id) {
-                startAtbat();
-            } else {
-                document.getElementById('game-status').innerText = "⏳ 상대방 턴 진행 중...";
-            }
-        });
-
-        socket.on('opponent_disconnected', () => {
-            alert('상대방이 접속을 종료했습니다. 로비로 돌아갑니다.');
-            window.location.reload();
-        });
+        socket.on('opponent_disconnected', () => { alert('상대방이 나갔습니다.'); window.location.reload(); });
     </script>
 </body>
 </html>
