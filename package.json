@@ -1,7 +1,7 @@
 {
-  "name": "baseball-3d-game",
+  "name": "real-3d-baseball",
   "version": "1.0.0",
-  "description": "3D Baseball Game with Timing Hit and Spacebar Mashing",
+  "description": "Real 3D Baseball Game with Innings, Pitcher & Batter Roles",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
