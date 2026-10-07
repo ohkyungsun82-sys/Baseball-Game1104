@@ -33,7 +33,6 @@ app.post('/api/signup', (req, res) => {
     if (db.users.find(u => u.username === username)) {
         return res.json({ success: false, message: '이미 존재하는 아이디입니다.' });
     }
-    
     const newUser = { username, password, wins: 0, losses: 0, gamesPlayed: 0 };
     db.users.push(newUser);
     saveDB(db);
@@ -54,8 +53,6 @@ let waitingPlayer = null;
 const rooms = {};
 
 io.on('connection', (socket) => {
-    console.log('사용자 접속:', socket.id);
-
     socket.on('join_matchmaking', (username) => {
         socket.username = username;
         if (!waitingPlayer) {
@@ -70,49 +67,31 @@ io.on('connection', (socket) => {
             p1.join(roomName);
             p2.join(roomName);
 
-            const generateSecret = () => {
-                const nums = [1,2,3,4,5,6,7,8,9];
-                const secret = [];
-                for (let i = 0; i < 3; i++) {
-                    const idx = Math.floor(Math.random() * nums.length);
-                    secret.push(nums.splice(idx, 1)[0]);
-                }
-                return secret.join('');
-            };
-
             rooms[roomName] = {
                 players: [p1, p2],
-                secrets: { [p1.id]: generateSecret(), [p2.id]: generateSecret() },
-                turn: p1.id,
-                history: { [p1.id]: [], [p2.id]: [] }
+                scores: { [p1.id]: 0, [p2.id]: 0 },
+                turn: p1.id
             };
 
-            p1.emit('game_start', { opponent: p2.username, myTurn: true });
-            p2.emit('game_start', { opponent: p1.username, myTurn: false });
+            p1.emit('game_start', { opponent: p2.username, isMyTurn: true });
+            p2.emit('game_start', { opponent: p1.username, isMyTurn: false });
         }
     });
 
     socket.on('cancel_matchmaking', () => {
-        if (waitingPlayer === socket) {
-            waitingPlayer = null;
-        }
+        if (waitingPlayer === socket) waitingPlayer = null;
     });
 
-    // 게임 내 실시간 채팅 메시지 처리
     socket.on('send_chat', (message) => {
-        let roomName = null;
         for (let r in rooms) {
             if (rooms[r].players.includes(socket)) {
-                roomName = r;
+                io.to(r).emit('receive_chat', { sender: socket.username, message });
                 break;
             }
         }
-        if (roomName) {
-            io.to(roomName).emit('receive_chat', { sender: socket.username, message });
-        }
     });
 
-    socket.on('submit_guess', ({ guess }) => {
+    socket.on('submit_score', ({ score }) => {
         let roomName = null;
         for (let r in rooms) {
             if (rooms[r].players.includes(socket)) {
@@ -121,50 +100,15 @@ io.on('connection', (socket) => {
             }
         }
         if (!roomName) return;
-
         const room = rooms[roomName];
-        if (room.turn !== socket.id) return;
+        room.scores[socket.id] = score;
 
         const opponent = room.players.find(p => p.id !== socket.id);
-        const secret = room.secrets[opponent.id];
-
-        let strikes = 0;
-        let balls = 0;
-        for (let i = 0; i < 3; i++) {
-            if (guess[i] === secret[i]) {
-                strikes++;
-            } else if (secret.includes(guess[i])) {
-                balls++;
-            }
-        }
-
-        const resultText = strikes === 0 && balls === 0 ? 'OUT' : `${strikes}S ${balls}B`;
-        const logEntry = { guess, result: resultText };
-        room.history[socket.id].push(logEntry);
-
-        io.to(roomName).emit('turn_result', {
-            attacker: socket.username,
-            guess,
-            strikes,
-            balls,
-            history: room.history
-        });
-
-        if (strikes === 3) {
-            socket.emit('game_over', { won: true });
-            opponent.emit('game_over', { won: false });
-            
-            const db = loadDB();
-            const u1 = db.users.find(u => u.username === socket.username);
-            const u2 = db.users.find(u => u.username === opponent.username);
-            if (u1) { u1.wins++; u1.gamesPlayed++; }
-            if (u2) { u2.losses++; u2.gamesPlayed++; }
-            saveDB(db);
-
-            delete rooms[roomName];
-            return;
-        }
-
+        
+        // 양쪽 다 점수를 제출했거나 턴이 끝났을 때 승패 판정
+        // 간단하게 본인의 턴 플레이가 끝나면 상대방에게 점수 전달 및 턴 교체
+        io.to(roomName).emit('update_score', { username: socket.username, score });
+        
         room.turn = opponent.id;
         io.to(roomName).emit('change_turn', { currentTurn: room.turn });
     });
@@ -175,9 +119,7 @@ io.on('connection', (socket) => {
             const room = rooms[r];
             if (room.players.includes(socket)) {
                 const opponent = room.players.find(p => p.id !== socket.id);
-                if (opponent) {
-                    opponent.emit('opponent_disconnected');
-                }
+                if (opponent) opponent.emit('opponent_disconnected');
                 delete rooms[r];
                 break;
             }
