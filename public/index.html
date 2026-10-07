@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>숫자 야구 대결 게임</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #f8fafc; text-align: center; margin: 0; padding: 30px; }
+        .card { background: #1e293b; max-width: 500px; margin: 0 auto; padding: 25px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        input { width: 80%; padding: 10px; margin: 8px 0; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; font-size: 16px; }
+        button { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold; width: 85%; margin-top: 8px; }
+        button:hover { background: #2563eb; }
+        .hidden { display: none !important; }
+        .log-box { background: #0f172a; border: 1px solid #334155; height: 130px; overflow-y: auto; text-align: left; padding: 10px; border-radius: 8px; margin: 10px 0; font-family: monospace; font-size: 14px; }
+        .chat-box { background: #0f172a; border: 1px solid #334155; height: 100px; overflow-y: auto; text-align: left; padding: 10px; border-radius: 8px; margin: 10px 0; font-size: 14px; }
+        .flex-row { display: flex; gap: 5px; justify-content: center; }
+        .flex-row input { width: 68%; margin: 0; }
+        .flex-row button { width: 28%; margin: 0; }
+    </style>
+</head>
+<body>
+
+    <div class="card" id="auth-screen">
+        <h2>⚾ 숫자 야구 게임</h2>
+        <input type="text" id="username" placeholder="아이디"><br>
+        <input type="password" id="password" placeholder="비밀번호"><br>
+        <button onclick="login()">로그인</button>
+        <button onclick="signup()" style="background: #10b981;">회원가입</button>
+        <p id="auth-msg" style="color: #ef4444; margin-top: 10px;"></p>
+    </div>
+
+    <div class="card hidden" id="lobby-screen">
+        <h2 id="welcome-user">환영합니다!</h2>
+        <p id="record-text">전적: 0승 0패</p>
+        <button onclick="startMatchmaking()">랜덤 매칭 게임 시작</button>
+    </div>
+
+    <div class="card hidden" id="waiting-screen">
+        <h2>상대를 찾는 중...</h2>
+        <p>비슷한 상대를 매칭하고 있습니다.</p>
+        <button onclick="cancelMatch()" style="background: #ef4444;">취소</button>
+    </div>
+
+    <div class="card hidden" id="game-screen">
+        <h3>VS <span id="opponent-name">상대방</span></h3>
+        <p id="turn-indicator" style="font-weight: bold; color: #f59e0b; margin: 5px 0;"></p>
+        
+        <div class="log-box" id="game-log"></div>
+
+        <div class="flex-row">
+            <input type="text" id="guess-input" placeholder="3자리 숫자 (예: 123)" maxlength="3">
+            <button onclick="submitGuess()">추측</button>
+        </div>
+
+        <h4 style="margin: 10px 0 5px 0; text-align: left; font-size: 14px;">💬 실시간 채팅</h4>
+        <div class="chat-box" id="chat-messages"></div>
+        <div class="flex-row">
+            <input type="text" id="chat-input" placeholder="메시지 입력..." onkeypress="if(event.key==='Enter') sendChat()">
+            <button onclick="sendChat()" style="background: #10b981;">전송</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let currentUser = null;
+
+        async function signup() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const res = await fetch('/api/signup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert('회원가입 성공! 자동 로그인됩니다.');
+                setLoginUser(data.user);
+            } else {
+                document.getElementById('auth-msg').innerText = data.message;
+            }
+        }
+
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setLoginUser(data.user);
+            } else {
+                document.getElementById('auth-msg').innerText = data.message;
+            }
+        }
+
+        function setLoginUser(user) {
+            currentUser = user;
+            document.getElementById('auth-screen').classList.add('hidden');
+            document.getElementById('lobby-screen').classList.remove('hidden');
+            document.getElementById('welcome-user').innerText = `${user.username}님 환영합니다!`;
+            document.getElementById('record-text').innerText = `전적: ${user.wins}승 ${user.losses}패`;
+        }
+
+        function startMatchmaking() {
+            document.getElementById('lobby-screen').classList.add('hidden');
+            document.getElementById('waiting-screen').classList.remove('hidden');
+            socket.emit('join_matchmaking', currentUser.username);
+        }
+
+        function cancelMatch() {
+            socket.emit('cancel_matchmaking');
+            document.getElementById('waiting-screen').classList.add('hidden');
+            document.getElementById('lobby-screen').classList.remove('hidden');
+        }
+
+        socket.on('waiting', (msg) => { console.log(msg); });
+
+        socket.on('game_start', ({ opponent, myTurn }) => {
+            document.getElementById('waiting-screen').classList.add('hidden');
+            document.getElementById('game-screen').classList.remove('hidden');
+            document.getElementById('opponent-name').innerText = opponent;
+            updateTurn(myTurn);
+            document.getElementById('game-log').innerHTML = '';
+            document.getElementById('chat-messages').innerHTML = '';
+        });
+
+        function updateTurn(isMyTurn) {
+            const indicator = document.getElementById('turn-indicator');
+            const input = document.getElementById('guess-input');
+            if (isMyTurn) {
+                indicator.innerText = "👉 나의 턴! 숫자를 입력하세요.";
+                indicator.style.color = "#10b981";
+                input.disabled = false;
+            } else {
+                indicator.innerText = "⏳ 상대방의 턴입니다...";
+                indicator.style.color = "#f59e0b";
+                input.disabled = true;
+            }
+        }
+
+        function submitGuess() {
+            const guess = document.getElementById('guess-input').value;
+            if (guess.length !== 3 || isNaN(guess)) {
+                alert('서로 다른 3자리 숫자를 정확히 입력해주세요!');
+                return;
+            }
+            socket.emit('submit_guess', { guess });
+            document.getElementById('guess-input').value = '';
+        }
+
+        // 채팅 전송 및 수신
+        function sendChat() {
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            if (!message) return;
+            socket.emit('send_chat', message);
+            input.value = '';
+        }
+
+        socket.on('receive_chat', ({ sender, message }) => {
+            const chatBox = document.getElementById('chat-messages');
+            chatBox.innerHTML += `<div><b>${sender}:</b> ${message}</div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+        });
+
+        socket.on('turn_result', ({ attacker, guess, strikes, balls }) => {
+            const logBox = document.getElementById('game-log');
+            logBox.innerHTML += `<div>[${attacker}] ${guess} ➔ <b>${strikes}S ${balls}B</b></div>`;
+            logBox.scrollTop = logBox.scrollHeight;
+        });
+
+        socket.on('change_turn', ({ currentTurn }) => {
+            updateTurn(currentTurn === socket.id);
+        });
+
+        socket.on('game_over', ({ won }) => {
+            if (won) {
+                alert('🎉 축하합니다! 게임에서 승리하셨습니다!');
+            } else {
+                alert('😢 아쉽게도 패배했습니다...');
+            }
+            window.location.reload();
+        });
+
+        socket.on('opponent_disconnected', () => {
+            alert('상대방이 나갔습니다. 로비로 돌아갑니다.');
+            window.location.reload();
+        });
+    </script>
+</body>
+</html>
