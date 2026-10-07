@@ -1,7 +1,7 @@
 {
-  "name": "baseball-game",
+  "name": "baseball-3d-game",
   "version": "1.0.0",
-  "description": "Numeric Baseball Game with Login",
+  "description": "3D Baseball Game with Timing Hit and Spacebar Mashing",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
