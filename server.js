@@ -26,15 +26,10 @@ function saveDB(data) {
 
 app.post('/api/signup', (req, res) => {
     const { username, password } = req.body;
-    if (!username || !password) {
-        return res.json({ success: false, message: '아이디와 비밀번호를 입력해주세요.' });
-    }
+    if (!username || !password) return res.json({ success: false, message: '아이디와 비밀번호를 입력해주세요.' });
     const db = loadDB();
-    if (db.users.find(u => u.username === username)) {
-        return res.json({ success: false, message: '이미 존재하는 아이디입니다.' });
-    }
-    const newUser = { username, password, wins: 0, losses: 0, gamesPlayed: 0 };
-    db.users.push(newUser);
+    if (db.users.find(u => u.username === username)) return res.json({ success: false, message: '이미 존재하는 아이디입니다.' });
+    db.users.push({ username, password, wins: 0, losses: 0, gamesPlayed: 0 });
     saveDB(db);
     res.json({ success: true, user: { username, wins: 0, losses: 0, gamesPlayed: 0 } });
 });
@@ -43,9 +38,7 @@ app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
     const db = loadDB();
     const user = db.users.find(u => u.username === username && u.password === password);
-    if (!user) {
-        return res.json({ success: false, message: '아이디 또는 비밀번호가 틀렸습니다.' });
-    }
+    if (!user) return res.json({ success: false, message: '아이디 또는 비밀번호가 틀렸습니다.' });
     res.json({ success: true, user: { username: user.username, wins: user.wins, losses: user.losses, gamesPlayed: user.gamesPlayed } });
 });
 
@@ -67,19 +60,122 @@ io.on('connection', (socket) => {
             p1.join(roomName);
             p2.join(roomName);
 
+            // 실제 야구 게임 상태 초기화
             rooms[roomName] = {
                 players: [p1, p2],
+                inning: 1,
+                isTop: true, // true: p1이 초(공격), false: p2가 초(공격)
                 scores: { [p1.id]: 0, [p2.id]: 0 },
-                turn: p1.id
+                outs: 0,
+                strikes: 0,
+                balls: 0,
+                bases: [false, false, false], // 1루, 2루, 3루
+                batter: p1,
+                pitcher: p2
             };
 
-            p1.emit('game_start', { opponent: p2.username, isMyTurn: true });
-            p2.emit('game_start', { opponent: p1.username, isMyTurn: false });
+            p1.emit('game_start', { opponent: p2.username, role: 'batter', gameState: rooms[roomName] });
+            p2.emit('game_start', { opponent: p1.username, role: 'pitcher', gameState: rooms[roomName] });
         }
     });
 
     socket.on('cancel_matchmaking', () => {
         if (waitingPlayer === socket) waitingPlayer = null;
+    });
+
+    // 투수가 구종 선택 후 공 던지기
+    function switchRoles(room) {
+        const temp = room.batter;
+        room.batter = room.pitcher;
+        room.pitcher = temp;
+    }
+
+    function checkInningChange(room, roomName) {
+        if (room.outs >= 3) {
+            room.outs = 0;
+            room.strikes = 0;
+            room.balls = 0;
+            room.bases = [false, false, false];
+
+            if (room.isTop) {
+                room.isTop = false; // 말 공격으로 전환
+            } else {
+                room.isTop = true;
+                room.inning++; // 다음 이닝
+            }
+
+            if (room.inning > 3) { // 3이닝 경기로 설정 (원하면 9이닝으로 변경 가능)
+                io.to(roomName).emit('game_over', { scores: room.scores });
+                delete rooms[roomName];
+                return true;
+            } else {
+                switchRoles(room);
+            }
+        }
+        return false;
+    }
+
+    socket.on('pitch_ball', ({ pitchType }) => {
+        let roomName = null;
+        for (let r in rooms) { if (rooms[r].players.includes(socket)) { roomName = r; break; } }
+        if (!roomName) return;
+        const room = rooms[roomName];
+        if (room.pitcher !== socket) return;
+
+        // 타자에게 공이 날아감 통보
+        room.batter.emit('incoming_pitch', { pitchType });
+    });
+
+    // 타자의 타격 결과 처리
+    socket.on('atbat_result', ({ result, hitPower }) => { // result: 'homerun', 'hit', 'strike', 'ball', 'out'
+        let roomName = null;
+        for (let r in rooms) { if (rooms[r].players.includes(socket)) { roomName = r; break; } }
+        if (!roomName) return;
+        const room = rooms[roomName];
+        if (room.batter !== socket) return;
+
+        let batterId = room.batter.id;
+
+        if (result === 'homerun') {
+            let count = 1 + room.bases.filter(b => b).length;
+            room.scores[batterId] += count;
+            room.bases = [false, false, false];
+        } else if (result === 'hit') {
+            // 진루 계산
+            if (room.bases[2]) { room.scores[batterId]++; }
+            room.bases[2] = room.bases[1];
+            room.bases[1] = room.bases[0];
+            room.bases[0] = true;
+        } else if (result === 'strike') {
+            room.strikes++;
+            if (room.strikes >= 3) {
+                room.outs++;
+                room.strikes = 0;
+                room.balls = 0;
+            }
+        } else if (result === 'ball') {
+            room.balls++;
+            if (room.balls >= 4) {
+                // 볼넷 진루
+                if (room.bases[0] && room.bases[1] && room.bases[2]) {
+                    room.scores[batterId]++;
+                } else {
+                    if (room.bases[0] && room.bases[1]) room.bases[2] = true;
+                    if (room.bases[0]) room.bases[1] = true;
+                    room.bases[0] = true;
+                }
+                room.balls = 0;
+            }
+        } else if (result === 'out') {
+            room.outs++;
+            room.strikes = 0;
+            room.balls = 0;
+        }
+
+        const isOver = checkInningChange(room, roomName);
+        if (!isOver) {
+            io.to(roomName).emit('update_game_state', { gameState: room });
+        }
     });
 
     socket.on('send_chat', (message) => {
@@ -89,28 +185,6 @@ io.on('connection', (socket) => {
                 break;
             }
         }
-    });
-
-    socket.on('submit_score', ({ score }) => {
-        let roomName = null;
-        for (let r in rooms) {
-            if (rooms[r].players.includes(socket)) {
-                roomName = r;
-                break;
-            }
-        }
-        if (!roomName) return;
-        const room = rooms[roomName];
-        room.scores[socket.id] = score;
-
-        const opponent = room.players.find(p => p.id !== socket.id);
-        
-        // 양쪽 다 점수를 제출했거나 턴이 끝났을 때 승패 판정
-        // 간단하게 본인의 턴 플레이가 끝나면 상대방에게 점수 전달 및 턴 교체
-        io.to(roomName).emit('update_score', { username: socket.username, score });
-        
-        room.turn = opponent.id;
-        io.to(roomName).emit('change_turn', { currentTurn: room.turn });
     });
 
     socket.on('disconnect', () => {
@@ -128,6 +202,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`서버 실행 중: http://localhost:${PORT}`);
-});
+server.listen(PORT, () => { console.log(`서버 실행 중: http://localhost:${PORT}`); });
